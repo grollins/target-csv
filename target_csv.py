@@ -6,10 +6,6 @@ import os
 import sys
 import json
 import csv
-import threading
-import http.client
-import urllib
-import pkg_resources
 import collections
 
 from jsonschema.validators import Draft4Validator
@@ -33,14 +29,14 @@ def flatten(d, parent_key='', sep='__'):
         else:
             items.append((new_key, str(v) if type(v) is list else v))
     return dict(items)
-        
+
 def persist_lines(delimiter, quotechar, lines):
     state = None
     schemas = {}
     key_properties = {}
     headers = {}
     validators = {}
-    
+
     for line in lines:
         try:
             o = json.loads(line)
@@ -65,7 +61,7 @@ def persist_lines(delimiter, quotechar, lines):
             file_is_empty = (not os.path.isfile(filename)) or os.stat(filename).st_size == 0
 
             flattened_record = flatten(o['record'])
-            
+
             if o['stream'] not in headers and not file_is_empty:
                 with open(filename, 'r') as csvfile:
                     reader = csv.reader(csvfile,
@@ -75,17 +71,17 @@ def persist_lines(delimiter, quotechar, lines):
                     headers[o['stream']] = first_line if first_line else flattened_record.keys()
             else:
                 headers[o['stream']] = flattened_record.keys()
-            
+
             with open(filename, 'a') as csvfile:
-                writer = csv.DictWriter(csvfile,                                        
+                writer = csv.DictWriter(csvfile,
                                         headers[o['stream']],
                                         extrasaction='ignore',
                                         delimiter=delimiter,
                                         quotechar=quotechar)
                 if file_is_empty:
                     writer.writeheader()
-                    
-                writer.writerow(flattened_record)    
+
+                writer.writerow(flattened_record)
 
             state = None
         elif t == 'STATE':
@@ -103,28 +99,8 @@ def persist_lines(delimiter, quotechar, lines):
         else:
             raise Exception("Unknown message type {} in message {}"
                             .format(o['type'], o))
-    
+
     return state
-
-
-def collect():
-    try:
-        version = pkg_resources.get_distribution('target-csv').version
-        conn = http.client.HTTPSConnection('collector.stitchdata.com', timeout=10)
-        conn.connect()
-        params = {
-            'e': 'se',
-            'aid': 'singer',
-            'se_ca': 'target-csv',
-            'se_ac': 'open',
-            'se_la': version,
-        }
-        conn.request('GET', '/i?' + urllib.parse.urlencode(params))
-        response = conn.getresponse()
-        conn.close()
-    except:
-        logger.debug('Collection request failed')
-
 
 def main():
     parser = argparse.ArgumentParser()
@@ -137,18 +113,12 @@ def main():
     else:
         config = {}
 
-    if not config.get('disable_collection', False):
-        logger.info('Sending version information to stitchdata.com. ' +
-                    'To disable sending anonymous usage data, set ' +
-                    'the config parameter "disable_collection" to true')
-        threading.Thread(target=collect).start()
-
     input = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
     state = None
     state = persist_lines(config.get('delimiter', ','),
                           config.get('quotechar', '"'),
                           input)
-        
+
     emit_state(state)
     logger.debug("Exiting normally")
 
