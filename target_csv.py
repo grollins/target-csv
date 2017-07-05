@@ -30,7 +30,7 @@ def flatten(d, parent_key='', sep='__'):
             items.append((new_key, str(v) if type(v) is list else v))
     return dict(items)
 
-def persist_lines(delimiter, quotechar, lines):
+def persist_lines(filename, delimiter, quotechar, lines):
     state = None
     schemas = {}
     key_properties = {}
@@ -57,7 +57,11 @@ def persist_lines(delimiter, quotechar, lines):
             schema = schemas[o['stream']]
             validators[o['stream']].validate(o['record'])
 
-            filename = o['stream'] + '.csv'
+            if filename is None:
+                filename = o['stream'] + '.csv'
+            else:
+                pass
+
             file_is_empty = (not os.path.isfile(filename)) or os.stat(filename).st_size == 0
 
             flattened_record = flatten(o['record'])
@@ -105,6 +109,7 @@ def persist_lines(delimiter, quotechar, lines):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', help='Config file')
+    parser.add_argument('-o', '--output', help='Output file')
     args = parser.parse_args()
 
     if args.config:
@@ -113,9 +118,16 @@ def main():
     else:
         config = {}
 
+    filename = None
+    if args.output:
+        filename = args.output
+    else:
+        config.get('filename', None)
+
     input = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
     state = None
-    state = persist_lines(config.get('delimiter', ','),
+    state = persist_lines(filename,
+                          config.get('delimiter', ','),
                           config.get('quotechar', '"'),
                           input)
 
